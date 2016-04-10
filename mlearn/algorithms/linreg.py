@@ -23,7 +23,7 @@ def sum_of_squared_residuals(x, y, beta):
     ssr : numpy.array
 
     References
-    --------
+    ----------
     .. [1] https://en.wikipedia.org/wiki/Residual_sum_of_squares
 
     Notes
