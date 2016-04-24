@@ -3,7 +3,7 @@
 import numpy as np
 
 
-def standardize(x,):
+def standardize(x):
     """
     Perform z-transformation to get standard score of input matrix.
 

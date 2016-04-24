@@ -1,6 +1,7 @@
 """This module contains simple functions for linear regressions."""
 
 import numpy as np
+import transform
 
 def sum_of_squared_residuals(x, y, beta):
     """
@@ -28,7 +29,7 @@ def sum_of_squared_residuals(x, y, beta):
 
     Notes
     -----
-    .. math:: SSR(\\beta_m) = \\displaystyle\\sum_{i=1}^{n}(x_i\\beta_m-y_i)^2
+    .. math:: SSR(\\beta) = \\displaystyle\\sum_{i=1}^{n}(x_i\\beta-y_i)^2
     .. math:: SSR(\\beta) = (x\\beta-y)^T (x\\beta-y)
 
     Examples
@@ -55,7 +56,7 @@ def sum_of_squared_residuals(x, y, beta):
 
     return ssr.ravel()
 
-def gradient_descent(x, y, beta_init=None, gamma=1, max_iter=200,
+def gradient_descent(x, y, beta_init=None, gamma=0.01, max_iter=200,
                      threshold=0.01, scaling=True, regularize=False):
     """
     Numerically estimates the unknown parameters :math:`\\beta_i` for a linear
@@ -104,14 +105,16 @@ def gradient_descent(x, y, beta_init=None, gamma=1, max_iter=200,
 
     Notes
     -----
-    .. math:: (1) \\text{The cost function is: } f(\\beta)=\\frac{1}{2n}\\
-              \\displaystyle\\sum_{i=1}^{n}(x_i\\beta_m-y_i)^2 = \\
+    .. math:: f(\\beta)=\\frac{1}{2n}\\
+              \\displaystyle\\sum_{i=1}^{n}(x_i\\beta-y_i)^2 = \\
               \\frac{1}{2n}(x\\beta-y)^T (x\\beta-y)=\\frac{1}{2n}SSR(\\beta)
-    .. math:: (2) \\text{The aim is: } \\min_\\beta f(\\beta)
-    .. math:: (3) \\text{The gradient function is: }f'(\\beta_m)=\\beta_m-\\
-              \\gamma\\frac{1}{n}\\displaystyle\\sum_{i=1}^{n}\\
-              (x_i\\beta_m-y_i)^2 x_i
-    .. math:: (4) f'(\\beta)=\\beta-\\gamma\\frac{1}{n}x^T(x\\beta-y)
+    .. math:: f'(\\beta)=\\beta-\\
+              \\frac{\\gamma}{n}\\displaystyle\\sum_{i=1}^{n}\\
+              (x_i\\beta_m-y_i) x_i = \\beta-\\gamma\\frac{1}{n}x^T(x\\beta-y)
+    .. math:: f'_{reg}(\\beta)=\\beta(1-\\gamma \\frac{\\lambda}{n} \\
+              \\beta_{reg})-\\frac{\\gamma}{n}x^T(x\\beta-y) \\text{ where } \\
+              \\beta_{reg} = \\begin{bmatrix} 0 \\\\ 1 \\\\ \\vdots \\\\ 1_m \\
+              \\end{bmatrix}
 
     References
     ----------
@@ -119,7 +122,48 @@ def gradient_descent(x, y, beta_init=None, gamma=1, max_iter=200,
 
     """
 
-    pass
+    n, m = x.shape
+
+    if scaling:
+        x = transform.standardize(x[:,1:])
+        x = np.append(np.ones((x.shape[0], 1)), x, axis=1)
+
+    if not beta_init:
+        beta_init = np.ones((m, 1))
+
+    reg_term = np.ones((m,1))
+    if regularize:
+        beta_reg = np.ones((m,1))
+        beta_reg[0,0] = 0
+        reg_term = 1-(gamma*(regularize/float(n)) * beta_reg)
+
+    beta = beta_init
+    current_cost = None
+    n_iter = 0
+
+    while True:
+        right_term = (gamma / float(n))
+        right_term = right_term * np.dot(np.transpose(x), np.dot(x, beta) - y)
+
+        left_term = beta * reg_term
+        beta = left_term - right_term
+
+        cost = sum_of_squared_residuals(x, y, beta)
+
+        if current_cost is None:
+            current_cost = cost
+        elif np.abs(cost - current_cost) < threshold:
+            break
+        else:
+            current_cost = cost
+
+        if n_iter == max_iter:
+            break
+        else:
+            n_iter += 1
+
+    return beta
+
 
 def ordinary_least_squares(x, y, regularize=False):
     """
@@ -199,19 +243,47 @@ def ordinary_least_squares(x, y, regularize=False):
     return beta
 
 if __name__ == "__main__":
+    """
     x = np.array([[1, 11, 104],
                   [1, 15, 99],
                   [1, 22, 89],
                   [1, 27, 88]])
+
+    x2 = np.array([[1, 11],
+                   [1, 15],
+                   [1, 22],
+                   [1, 27]])
 
     y = np.array([[12],
                   [15],
                   [19],
                   [22]])
 
-    beta_zero = np.zeros((3,1))
+    beta_zero = np.zeros((2,1))
 
-    print(sum_of_squared_residuals(x, y, beta_zero))
-    beta_min = ordinary_least_squares(x, y)
-    print(sum_of_squared_residuals(x, y, beta_min))
+    print(sum_of_squared_residuals(x2, y, beta_zero))
+    beta_min = ordinary_least_squares(x2, y)
+    print(sum_of_squared_residuals(x2, y, beta_min))
+
+    beta_grad = gradient_descent(x2, y, scaling=False, gamma=0.001)
+    print(sum_of_squared_residuals(x2, y, beta_grad))
+    """
+
+    from sklearn import datasets, linear_model
+    diabetes = datasets.load_diabetes()
+
+    # Create linear regression object
+    regr = linear_model.LinearRegression()
+
+    # Train the model using the training sets
+    regr.fit(diabetes.data, diabetes.target)
+    print(sum_of_squared_residuals(diabetes.data, diabetes.target, regr.coef_))
+
+    x = np.append(np.ones((diabetes.data.shape[0], 1)), diabetes.data, axis=1)
+    y = diabetes.target
+    ols = ordinary_least_squares(x, y)
+    print(sum_of_squared_residuals(x, y, ols))
+
+    gd = gradient_descent(x,np.reshape(y,(442,1)))
+    print(sum_of_squared_residuals(x, y, gd.ravel()))
 
